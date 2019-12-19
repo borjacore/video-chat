@@ -1,31 +1,34 @@
-import React, { createContext, useContext, useReducer, useRef } from 'react';
-import axios from 'axios';
-import { connect } from 'twilio-video';
+import React, { createContext, useContext, useReducer, useRef } from "react";
+import axios from "axios";
+import { connect } from "twilio-video";
 
 const TWILIO_TOKEN_URL =
-  'https://raspberry-partridge-6111.twil.io/create-room-token';
+  "https://raspberry-partridge-6111.twil.io/create-room-token";
 
 const DEFAULT_STATE = {
   identity: false,
   roomName: false,
   token: false,
-  room: false,
+  room: false
 };
 
 const reducer = (state, action) => {
   switch (action.type) {
-    case 'join':
+    case "join":
       return {
         ...state,
         token: action.token,
         identity: action.identity,
-        roomName: action.roomName,
+        roomName: action.roomName
       };
 
-    case 'set-active-room':
+    case "set-active-room":
       return { ...state, room: action.room };
 
-    case 'disconnect':
+    case "silence-room":
+      return { ...state, room: action.room };
+
+    case "disconnect":
       state.room && state.room.disconnect();
       return DEFAULT_STATE;
 
@@ -53,20 +56,20 @@ const useTwilioVideo = () => {
   const getRoomToken = async ({ identity, roomName }) => {
     const result = await axios.post(TWILIO_TOKEN_URL, {
       identity,
-      room: roomName,
+      room: roomName
     });
 
-    dispatch({ type: 'join', token: result.data, identity, roomName });
+    dispatch({ type: "join", token: result.data, identity, roomName });
   };
 
   const handleRemoteParticipant = (container, participant) => {
     const id = participant.sid;
 
-    const el = document.createElement('div');
+    const el = document.createElement("div");
     el.id = id;
-    el.className = 'remote-participant';
+    el.className = "remote-participant";
 
-    const name = document.createElement('h4');
+    const name = document.createElement("h4");
     name.innerText = participant.identity;
     el.appendChild(name);
 
@@ -85,14 +88,14 @@ const useTwilioVideo = () => {
       }
     });
 
-    participant.on('trackSubscribed', addTrack);
+    participant.on("trackSubscribed", addTrack);
 
-    participant.on('trackUnsubscribed', track => {
+    participant.on("trackUnsubscribed", track => {
       track.detach().forEach(el => el.remove);
 
-      const container = document.getElementById(id)
+      const container = document.getElementById(id);
       if (container) container.remove();
-    })
+    });
   };
 
   const connectToRoom = async () => {
@@ -106,8 +109,8 @@ const useTwilioVideo = () => {
         name: state.roomName,
         audio: true,
         video: { width: 640 },
-        logLevel: 'info',
-      },
+        logLevel: "info"
+      }
     ).catch(error => {
       console.error(`Unable to join the room: ${error}`);
     });
@@ -124,13 +127,48 @@ const useTwilioVideo = () => {
     };
 
     room.participants.forEach(handleParticipant);
-    room.on('participantConnected', handleParticipant);
+    room.on("participantConnected", handleParticipant);
 
-    dispatch({ type: 'set-active-room', room });
+    dispatch({ type: "set-active-room", room });
+  };
+
+  const silenceRoom = async () => {
+    if (!state.token) {
+      return;
+    }
+
+    const room = await connect(
+      state.token,
+      {
+        name: state.roomName,
+        audio: false,
+        video: { width: 640 },
+        logLevel: "info"
+      }
+    ).catch(error => {
+      console.error(`Unable to join the room: ${error}`);
+    });
+
+    const localTrack = [...room.localParticipant.videoTracks.values()][0].track;
+
+    if (!videoRef.current.hasChildNodes()) {
+      const localEl = localTrack.attach();
+      videoRef.current.appendChild(localEl);
+    }
+
+    const handleParticipant = participant => {
+      handleRemoteParticipant(videoRef.current, participant);
+    };
+
+    room.participants.forEach(handleParticipant);
+    room.on("participantConnected", handleParticipant);
+
+    dispatch({ type: "silence-room", room });
   };
 
   const startVideo = () => connectToRoom();
-  const leaveRoom = () => dispatch({ type: 'disconnect' });
+  const leaveRoom = () => dispatch({ type: "disconnect" });
+  const silenceMyslef = () => silenceRoom();
 
   return { state, getRoomToken, startVideo, videoRef, leaveRoom };
 };

@@ -93,6 +93,7 @@ h1 {
   grid-template-columns: repeat(3, 1fr);
   max-width: 90vw;
   position: relative;
+  transform: scale(-1, 1);
 }
 
 .chat h4 {
